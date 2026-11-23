@@ -256,7 +256,31 @@
         metadata: "Alosztályi kiadvány | Hatályos: 2026.11.01. | Kizárólag a Légimentő egység tagjainak",
         publicAnnouncement: "LÉGIMENTŐ JELENTKEZÉSI FELHÍVÁS! A Mentőhelikopteres Alosztály keresi leendő pilótáit és HEMS mentőtisztjeit.\n\nJelentkezési feltételek:\n• Legalább Mentőszakápoló rendfokozat és hibátlan fegyelmi múlt\n• Érvényes légijármű-vezetői engedély (pilóta munkakörhöz)\n• Kiemelkedő traumatológiai és SBAR rádióforgalmazási ismeretek\n\nÉrdeklődni az Alosztályvezetőnél vagy a Vezetőségnél lehet!",
         internalAnnouncement: "BELSŐ LÉGI KÖZLEMÉNY: Szombaton 20:00-kor éjszakai leszállózóna-biztosítási és műszeres megközelítési gyakorlat a vidéki térségben. Felszállás előtt minden egység végezze el a kötelező FOD checket és tesztelje a helipad-rádiót!",
-        reportTemplate: "=== OMSZ LÉGIMENTŐ (HEMS) JELENTÉS ===\nEgység: [ALFA-1 / Pilóta & Mentőtiszt]\nDátum: [ÉÉÉÉ.HH.NN. ÓÓ:PP]\nHelyszín: [Leszállózóna / Térség]\nSérült(ek): [Állapot, vitális paraméterek]\nEllátás: [Földi stabilizálás + légi szállítás, SBAR átadás]\nMegjegyzés: [Időjárás, leszállás, üzemanyag]",
+        reportTemplate: "=== OMSZ LÉGIMENTŐ (HEMS) – PILÓTA (PIC) JELENTÉSMINTA ===\nEgység / Lajstromjel: [OMSZ-HEMS-01 / ALFA-1]\nDátum / Időpont: [ÉÉÉÉ.HH.NN. | Felszállás ÓÓ:PP – Visszaérkezés ÓÓ:PP]\nLégijármű-parancsnok (PIC): [Név, rendfokozat]\nLégi mentőorvos (HEMS Doctor): [Név, rendfokozat]\nRiasztás jellege / indoka: [Magas prioritású KKV / trauma / szekunder transzport]\nLeszállózóna (LZ) és útvonal: [Helyszín, koordináták, légifolyosó, LZ-biztosítás]\nRepült idő / Műszaki állapot: [[X] perc | Sérülésmentes / üzemanyag]",
+        doctorReportTemplate: "=== OMSZ LÉGIMENTŐ (HEMS) – MENTŐORVOSI (HEMS DOCTOR) JELENTÉSMINTA ===\nDátum / Egység: [ÉÉÉÉ.HH.NN. | OMSZ-HEMS-01]\nLégi mentőorvos (HEMS Doctor): [Dr. Név / Név]\nBeteg neve: [Beteg IC neve]\nSérülés: [Polytrauma / zárt-nyílt fractura / laesio / haemorragia]\nEllátás menete: [ABCDE vizsgálat -> O2 szupplementáció -> i.v. access -> haemorragia-kontroll -> immobilizáció]\nVitális paraméterek & Gyógyszerezés: [RR / P / SpO2 / L | Isolyte / Exacyl / Analgetikum]\nKórházi átadás (SBAR): [Stabilizált állapotban SBAR szerint átadva]",
+        doctorTemplates: [
+          {
+            id: "tpl-trauma",
+            name: "Polytrauma / Fractura (szakszavas)",
+            patientName: "[Beteg IC neve]",
+            injury: "Polytrauma, zárt/nyílt fractura, külső/belső haemorragia",
+            steps: "ABCDE felmérés -> O2 szupplementáció -> i.v. access -> haemorragia-kontroll (nyomókötés / Exacyl i.v.) -> fractura immobilizáció (sín / vákuummatrac) -> SBAR átadás"
+          },
+          {
+            id: "tpl-penetrating",
+            name: "Áthatoló laesio / Haemorrhagiás shock (szakszavas)",
+            patientName: "[Beteg IC neve]",
+            injury: "Áthatoló (lőtt/szúrt) laesio, haemorrhagiás shock veszélye",
+            steps: "ABCDE vizsgálat -> direkt kompresszió / nyomókötés -> O2 terápia -> vénabiztosítás -> Exacyl i.v. + Isolyte i.v. -> shock-monitorozás -> SBAR átadás"
+          },
+          {
+            id: "tpl-loc",
+            name: "Syncope / Tudatzavar (szakszavas)",
+            patientName: "[Beteg IC neve]",
+            injury: "Syncope / sopor / coma, hypoxia vagy hypoglykaemia gyanúja",
+            steps: "Eszmélet/légzés/keringés vizsgálat -> légútbiztosítás (NPA/OPA) -> O2 szupplementáció -> vércukor/RR/P/SpO2 ellenőrzés -> i.v. terápia -> SBAR átadás"
+          }
+        ],
         chapters: [
           {
             id: "hel-1",
@@ -1108,6 +1132,185 @@ Aláírás (HEMS Doctor): ${doctor}
       );
     };
 
+    // JELENTÉS MINTA KÁRTYA (HEMS ESETÉN KÜLÖN PILÓTA ÉS MENTŐORVOSI SABLONNAL)
+    const HeliOrDeptReportCard = ({ deptData, canEdit, onUpdateDept, copyTpl, copied, edRep, setEdRep, repTxt, setRepTxt }) => {
+      const isHeli = deptData.id === "helikopteres";
+      const [tplMode, setTplMode] = useState("doctor");
+      const [docRepTxt, setDocRepTxt] = useState(
+        deptData.doctorReportTemplate || INITIAL_SUBDEPTS.helikopteres.doctorReportTemplate
+      );
+      const [edDocRep, setEdDocRep] = useState(false);
+      const [copiedDocTpl, setCopiedDocTpl] = useState(false);
+      const [selectedPresetId, setSelectedPresetId] = useState("tpl-trauma");
+      const [customPatient, setCustomPatient] = useState("[Beteg IC neve]");
+      const [customInjury, setCustomInjury] = useState("Polytrauma, zárt/nyílt fractura, külső/belső haemorragia");
+      const [customSteps, setCustomSteps] = useState("ABCDE felmérés -> O2 szupplementáció -> i.v. access -> haemorragia-kontroll (nyomókötés / Exacyl i.v.) -> fractura immobilizáció (sín / vákuummatrac) -> SBAR átadás");
+
+      useEffect(() => {
+        setDocRepTxt(deptData.doctorReportTemplate || INITIAL_SUBDEPTS.helikopteres.doctorReportTemplate);
+        setEdDocRep(false);
+      }, [deptData.id, deptData.doctorReportTemplate]);
+
+      const presets = deptData.doctorTemplates && deptData.doctorTemplates.length
+        ? deptData.doctorTemplates
+        : INITIAL_SUBDEPTS.helikopteres.doctorTemplates;
+
+      const applyPreset = (p) => {
+        setSelectedPresetId(p.id);
+        setCustomPatient(p.patientName);
+        setCustomInjury(p.injury);
+        setCustomSteps(p.steps);
+        const formatted = `=== OMSZ LÉGIMENTŐ (HEMS) – MENTŐORVOSI (HEMS DOCTOR) JELENTÉSMINTA ===
+Sablon típusa: ${p.name}
+Dátum / Egység: [ÉÉÉÉ.HH.NN. | OMSZ-HEMS-01]
+Légi mentőorvos (HEMS Doctor): [Dr. Név / Név]
+Beteg neve: ${p.patientName}
+Sérülés: ${p.injury}
+Ellátás menete: ${p.steps}
+Vitális paraméterek & Gyógyszerezés: [RR / P / SpO2 / L | Isolyte / Exacyl / Analgetikum]
+Kórházi átadás (SBAR): [Stabilizált állapotban SBAR szerint átadva]`;
+        setDocRepTxt(formatted);
+      };
+
+      const copyDocTpl = () => {
+        const t = docRepTxt || "";
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(t).then(() => { setCopiedDocTpl(true); setTimeout(() => setCopiedDocTpl(false), 2000); });
+        else { const ta = document.createElement("textarea"); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); setCopiedDocTpl(true); setTimeout(() => setCopiedDocTpl(false), 2000); }
+      };
+
+      if (!isHeli) {
+        return (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-1.5 rounded-lg bg-slate-900 text-white"><Icons.File c="w-4 h-4" /></span>
+                <div>
+                  <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">Jelentés minta ({deptData.shortName})</h3>
+                  <p className="text-[11px] text-slate-500">Szabványos RP szolgálati jelentéssablon másoláshoz</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={copyTpl} className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold ${copied ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"}`}>
+                  {copied ? <Icons.Check c="w-3.5 h-3.5" /> : <Icons.Copy c="w-3.5 h-3.5" />}{copied ? "Sablon kimásolva!" : "Sablon másolása"}
+                </button>
+                {canEdit && !edRep && <button onClick={() => setEdRep(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg"><Icons.Edit c="w-3.5 h-3.5" />Sablon szerkesztése</button>}
+              </div>
+            </div>
+            <div className="p-5">
+              {edRep ? (
+                <div className="space-y-3">
+                  <textarea rows="7" value={repTxt} onChange={(e) => setRepTxt(e.target.value)} className="inp font-mono" />
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => { setRepTxt(deptData.reportTemplate || ""); setEdRep(false); }} className="px-4 py-2 bg-slate-200 text-xs font-bold rounded-lg">Mégse</button>
+                    <button onClick={() => { onUpdateDept({ ...deptData, reportTemplate: repTxt }); setEdRep(false); }} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg">Sablon mentése Supabase-be</button>
+                  </div>
+                </div>
+              ) : <pre className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-mono text-slate-800 whitespace-pre-wrap">{deptData.reportTemplate}</pre>}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="p-1.5 rounded-lg bg-slate-900 text-white"><Icons.File c="w-4 h-4" /></span>
+              <div>
+                <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">Jelentés minták – Mentőhelikopteres (HEMS)</h3>
+                <p className="text-[11px] text-slate-500">Külön sablon a Légijármű-parancsnoknak (PIC) és a Légi mentőorvosnak (HEMS Doctor) szakszavakkal</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-200/80 p-1 rounded-xl">
+              <button type="button" onClick={() => setTplMode("doctor")} className={`px-3 py-1.5 rounded-lg text-xs font-extrabold ${tplMode === "doctor" ? "bg-sky-600 text-white" : "text-slate-700"}`}>Mentőorvosi (HEMS Doctor) minta</button>
+              <button type="button" onClick={() => setTplMode("pic")} className={`px-3 py-1.5 rounded-lg text-xs font-extrabold ${tplMode === "pic" ? "bg-slate-900 text-white" : "text-slate-700"}`}>Pilóta (PIC) minta</button>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {tplMode === "doctor" ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-sky-50/70 p-3.5 rounded-xl border border-sky-200">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-extrabold uppercase text-sky-950 mr-1">Szakszavas orvosi sablonok:</span>
+                    {presets.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => applyPreset(p)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${selectedPresetId === p.id ? "bg-sky-700 text-white" : "bg-white text-sky-900 border border-sky-300"}`}
+                      >{p.name}</button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={copyDocTpl} className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold ${copiedDocTpl ? "bg-emerald-600 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"}`}>
+                      {copiedDocTpl ? <Icons.Check c="w-3.5 h-3.5" /> : <Icons.Copy c="w-3.5 h-3.5" />}{copiedDocTpl ? "Orvosi minta másolva!" : "Orvosi minta másolása"}
+                    </button>
+                    {canEdit && !edDocRep && (
+                      <button onClick={() => setEdDocRep(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg">
+                        <Icons.Edit c="w-3.5 h-3.5" />Minta szerkesztése
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
+                  <div>
+                    <span className="font-extrabold uppercase text-slate-500 block mb-0.5">Beteg neve</span>
+                    <span className="font-semibold text-slate-800">{customPatient}</span>
+                  </div>
+                  <div>
+                    <span className="font-extrabold uppercase text-slate-500 block mb-0.5">Sérülés (szakszó)</span>
+                    <span className="font-semibold text-slate-800">{customInjury}</span>
+                  </div>
+                  <div>
+                    <span className="font-extrabold uppercase text-slate-500 block mb-0.5">Ellátás menete (szakszó)</span>
+                    <span className="font-semibold text-slate-800">{customSteps}</span>
+                  </div>
+                </div>
+
+                {edDocRep ? (
+                  <div className="space-y-3">
+                    <textarea rows="8" value={docRepTxt} onChange={(e) => setDocRepTxt(e.target.value)} className="inp font-mono" />
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => { setDocRepTxt(deptData.doctorReportTemplate || INITIAL_SUBDEPTS.helikopteres.doctorReportTemplate); setEdDocRep(false); }} className="px-4 py-2 bg-slate-200 text-xs font-bold rounded-lg">Mégse</button>
+                      <button onClick={() => { onUpdateDept({ ...deptData, doctorReportTemplate: docRepTxt }); setEdDocRep(false); }} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg">Orvosi minta mentése Supabase-be</button>
+                    </div>
+                  </div>
+                ) : (
+                  <pre className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-mono text-slate-800 whitespace-pre-wrap">{docRepTxt}</pre>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-end gap-2">
+                  <button onClick={copyTpl} className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold ${copied ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"}`}>
+                    {copied ? <Icons.Check c="w-3.5 h-3.5" /> : <Icons.Copy c="w-3.5 h-3.5" />}{copied ? "Pilóta minta másolva!" : "Pilóta minta másolása"}
+                  </button>
+                  {canEdit && !edRep && (
+                    <button onClick={() => setEdRep(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg">
+                      <Icons.Edit c="w-3.5 h-3.5" />Minta szerkesztése
+                    </button>
+                  )}
+                </div>
+                {edRep ? (
+                  <div className="space-y-3">
+                    <textarea rows="7" value={repTxt} onChange={(e) => setRepTxt(e.target.value)} className="inp font-mono" />
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => { setRepTxt(deptData.reportTemplate || ""); setEdRep(false); }} className="px-4 py-2 bg-slate-200 text-xs font-bold rounded-lg">Mégse</button>
+                      <button onClick={() => { onUpdateDept({ ...deptData, reportTemplate: repTxt }); setEdRep(false); }} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg">Sablon mentése Supabase-be</button>
+                    </div>
+                  </div>
+                ) : (
+                  <pre className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-mono text-slate-800 whitespace-pre-wrap">{deptData.reportTemplate}</pre>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      );
+    };
+
     const SubDepartmentView = ({ deptData, currentUser, lzSpots, onUpdateDept, onOpenExam }) => {
       const role = currentUser.role;
       const hasInternal = canAccessSubDeptInternal(role, deptData.id);
@@ -1195,34 +1398,17 @@ Aláírás (HEMS Doctor): ${doctor}
 
               {deptData.id === "helikopteres" && <HeliMapReportGenerator currentUser={currentUser} lzSpots={lzSpots} />}
 
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="p-1.5 rounded-lg bg-slate-900 text-white"><Icons.File c="w-4 h-4" /></span>
-                    <div>
-                      <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-900">Jelentés minta ({deptData.shortName})</h3>
-                      <p className="text-[11px] text-slate-500">Szabványos RP szolgálati jelentéssablon másoláshoz</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={copyTpl} className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold ${copied ? "bg-emerald-600 text-white" : "bg-slate-900 text-white"}`}>
-                      {copied ? <Icons.Check c="w-3.5 h-3.5" /> : <Icons.Copy c="w-3.5 h-3.5" />}{copied ? "Sablon kimásolva!" : "Sablon másolása"}
-                    </button>
-                    {canEdit && !edRep && <button onClick={() => setEdRep(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-bold rounded-lg"><Icons.Edit c="w-3.5 h-3.5" />Sablon szerkesztése</button>}
-                  </div>
-                </div>
-                <div className="p-5">
-                  {edRep ? (
-                    <div className="space-y-3">
-                      <textarea rows="7" value={repTxt} onChange={(e) => setRepTxt(e.target.value)} className="inp font-mono" />
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => { setRepTxt(deptData.reportTemplate || ""); setEdRep(false); }} className="px-4 py-2 bg-slate-200 text-xs font-bold rounded-lg">Mégse</button>
-                        <button onClick={() => { onUpdateDept({ ...deptData, reportTemplate: repTxt }); setEdRep(false); }} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg">Sablon mentése Supabase-be</button>
-                      </div>
-                    </div>
-                  ) : <pre className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-mono text-slate-800 whitespace-pre-wrap">{deptData.reportTemplate}</pre>}
-                </div>
-              </div>
+              <HeliOrDeptReportCard
+                deptData={deptData}
+                canEdit={canEdit}
+                onUpdateDept={onUpdateDept}
+                copyTpl={copyTpl}
+                copied={copied}
+                edRep={edRep}
+                setEdRep={setEdRep}
+                repTxt={repTxt}
+                setRepTxt={setRepTxt}
+              />
 
               <DocumentViewer docData={deptData} onUpdateDoc={onUpdateDept} canEdit={canEdit} />
             </>
