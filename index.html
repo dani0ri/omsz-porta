@@ -397,7 +397,7 @@
         ["q-mot-3","Mit végez el elsőként tömegbalesetnél (MCI) a motoros egység?",["Elhagyja a helyszínt","Elvégzi a sérültek osztályozását (TRIAGE)","Megműti őket","Fényképez"],1,"TRIAGE osztályozást végez a többi egység érkezéséig."],
         ["q-mot-4","Szállíthat-e beteget a mentőmotor?",["Könnyű sérültet","Nem, betegszállításra nem alkalmas","Sisakban igen","1 km-en belül"],1,"Betegszállításra nem alkalmas."],
         ["q-mot-5","Mekkora max. sebességkülönbséggel haladhat a motoros dugóban?",["+50 km/h","+20 km/h","+80 km/h","Tilos"],1,"Folyamatos jelzéssel max. +20 km/h különbséggel."],
-        ["q-mot-6","Hogyan kell pozicionálni a motort a helyszínen?",["5 cm-re a sérülttől","Úgy, hogy védje a mentőst a forgalomtól, de ne akadályozza a mentőautót","Szemközti sávban keresztben","Járdán"],1,"Védje a beavatkozót és hagyjon helyet a mentőautónak."],
+        ["q-mot-6","Hogyan kell pozicionálni a motort a helyszínen?",["5 cm-re a sérülttől","Úgy, hogy védje a mentőst a forgalomtól, de ne akadályozza a mentőautót","Szemközti sávban keresztben","Járdán"],1,"Védje a beavatkozó és hagyjon helyet a mentőautónak."],
         ["q-mot-7","Milyen életmentő készülék van a motor oldaldobozában?",["Röntgen","Kompakt defibrillátor (AED)","Vákuummatrac","Műtőasztal"],1,"Kompakt AED defibrillátor."],
         ["q-mot-8","Milyen i.v. szerek vannak a motoros alapfelszerelésében?",["Haloperidol","Tonogen, Algopyrin, Exacyl, Isolyte 500 ml","Gipszpólya","Semmi"],1,"Tonogen, Algopyrin, Exacyl, Isolyte 500 ml."],
         ["q-mot-9","Ki függesztheti fel a motoros szolgálatot viharban/jeges úton?",["Gyakorló ápoló","Az alosztályvezető","Szerelőtelep","Beteg"],1,"Az alosztályvezető rendelheti el."],
@@ -477,14 +477,16 @@
       return o;
     };
 
-    // INTERAKTÍV GTA V LÉGIMENTŐ TÉRKÉP & JELENTÉSGENERÁTOR (+ / - NAGYÍTÁSSAL ÉS HÚZÁSSAL)
+    // INTERAKTÍV GTA V LÉGIMENTŐ TÉRKÉP & PILÓTA / MENTŐORVOS JELENTÉSGENERÁTOR
     const HeliMapReportGenerator = ({ currentUser, lzSpots }) => {
       const spots = lzSpots && lzSpots.length ? lzSpots : INITIAL_HELI_LZ_SPOTS;
       const [mode, setMode] = useState("B");
       const [ptA, setPtA] = useState({ x: 52.5, y: 76.0 });
       const [ptB, setPtB] = useState({ x: 41.5, y: 18.0 });
       const [mapErr, setMapErr] = useState(false);
-      const [copied, setCopied] = useState(false);
+      const [reportRoleTab, setReportRoleTab] = useState("pic");
+      const [copiedPic, setCopiedPic] = useState(false);
+      const [copiedDoc, setCopiedDoc] = useState(false);
 
       const [zoom, setZoom] = useState(1);
       const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -524,15 +526,60 @@
       const todayStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")}.`;
       const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
+      // Pilóta (PIC) repülési adatai
       const [callsign, setCallsign] = useState("OMSZ-HEMS-01");
-      const [doctor, setDoctor] = useState("Dr. Nagy Anna, Mentőorvos");
-      const [reason, setReason] = useState("Munkahelyi baleset (favágótelep – súlyos végtagsérülés)");
+      const [doctor, setDoctor] = useState("Dr. Nagy Anna, Légi mentőorvos");
+      const [reason, setReason] = useState("Súlyos autópályás / külterületi baleset – politrauma");
       const [takeoffTime, setTakeoffTime] = useState(nowTime);
       const [fuel, setFuel] = useState("100%");
       const [weather, setWeather] = useState("Tiszta égbolt, jó látási viszonyok, enyhe oldalszél");
       const [lzSecurity, setLzSecurity] = useState("Igen – Földi mentőegység és Rendőrség biztosította");
       const [hospTime, setHospTime] = useState("");
       const [baseTime, setBaseTime] = useState("");
+
+      // Mentőorvosi (HEMS Doctor) sablon és szakszerű orvosi adatok
+      const [docTemplatePreset, setDocTemplatePreset] = useState("trauma");
+      const [patientName, setPatientName] = useState("Ismeretlen / [Beteg IC neve]");
+      const [injuryDesc, setInjuryDesc] = useState("Polytrauma, zárt/nyílt csonttörés, haemorragia");
+      const [careSteps, setCareSteps] = useState("ABCDE vizsgálat -> O2 szupplementáció -> vénabiztosítás -> haemorragia-csillapítás -> immobilizáció (vákuummatrac/sín)");
+      const [anamnesis, setAnamnesis] = useState("Magas energiájú trauma mechanizmus, eszméletállapot/GCS felmérés");
+      const [vitalsScene, setVitalsScene] = useState("RR: 110/70 Hgmm, P: 112/min, SpO2: 94%, L: 20/min, GCS: 14");
+      const [vitalsFlight, setVitalsFlight] = useState("RR: 120/75 Hgmm, P: 98/min, SpO2: 98%, L: 16/min, GCS: 15");
+      const [medsApplied, setMedsApplied] = useState("Isolyte 500 ml i.v., Exacyl i.v., Analgetikum (i.v.)");
+      const [interventions, setInterventions] = useState("NPA/OPA vagy emelt szintű légútbiztosítás, nyomókötés/tourniquet, vércukor- és EKG-monitorozás");
+      const [handoverNotes, setHandoverNotes] = useState("Hemodinamikailag stabilizált állapotban SBAR protokoll szerint átadva a sürgősségi/trauma osztálynak");
+
+      const applyDoctorTemplate = (preset) => {
+        setDocTemplatePreset(preset);
+        if (preset === "trauma") {
+          setInjuryDesc("Polytrauma, zárt/nyílt fractura, külső/belső haemorragia");
+          setCareSteps("ABCDE felmérés -> O2 terápia -> i.v. access -> haemorragia kontroll (nyomókötés/Exacyl) -> fractura immobilizáció -> vákuummatrac");
+          setAnamnesis("Magas energiájú mechanikai trauma, KÉM státusz ellenőrizve");
+          setVitalsScene("RR: 105/65 Hgmm, P: 116/min, SpO2: 93%, L: 22/min");
+          setVitalsFlight("RR: 122/78 Hgmm, P: 96/min, SpO2: 98%, L: 16/min");
+          setMedsApplied("Isolyte 500 ml i.v., Exacyl i.v., Lidocain / Analgetikum");
+          setInterventions("Légútbiztosítás, nyomókötés/sínrögzítés, folyamatos monitorozás");
+          setHandoverNotes("Stabilizált állapotban SBAR jelentéssel átadva a trauma teamnek");
+        } else if (preset === "penetrating") {
+          setInjuryDesc("Áthatoló / lőtt / szúrt laesio, haemorrhagiás shock veszélye");
+          setCareSteps("ABCDE vizsgálat -> direkt kompresszió/nyomókötés -> O2 -> i.v. access -> Exacyl/Isolyte -> shock-pozíció/monitorozás");
+          setAnamnesis("Áthatoló sérülés (lőtt/szúrt/idegentest), vérvesztéses anamnézis");
+          setVitalsScene("RR: 95/60 Hgmm, P: 124/min, SpO2: 92%, L: 24/min");
+          setVitalsFlight("RR: 115/72 Hgmm, P: 102/min, SpO2: 97%, L: 18/min");
+          setMedsApplied("Exacyl i.v., Isolyte i.v., Arterenol / Tonogen (indikáció szerint)");
+          setInterventions("Nyomókötés, idegentest helyben hagyása/rögzítése, vénabiztosítás, EKG/SpO2");
+          setHandoverNotes("Műtéti ellátásra előkészítve, SBAR átadással átadva");
+        } else if (preset === "loc") {
+          setInjuryDesc("Syncope / sopor / coma, hypoxia vagy hypoglykaemia gyanúja");
+          setCareSteps("Eszmélet/légzés/keringés vizsgálat -> légútbiztosítás (NPA/OPA) -> O2 -> vércukor/RR/P/SpO2 -> i.v. access -> terápia");
+          setAnamnesis("Hirtelen fellépő eszméletvesztés / tudatzavar, anamnesztikus előzmények felvétele");
+          setVitalsScene("RR: 92/58 Hgmm, P: 54/min, SpO2: 91%, L: 10/min");
+          setVitalsFlight("RR: 118/76 Hgmm, P: 78/min, SpO2: 98%, L: 16/min");
+          setMedsApplied("Glükóz oldat i.v. / Glucagen, Isolyte i.v., Arterenol / Tonogen (indikáció szerint)");
+          setInterventions("Légútbiztosítás (fej hátrahajtása, NPA/OPA), oxigenizáció, vércukor- és vitális monitorozás");
+          setHandoverNotes("Tudatállapot rendeződése/stabilizálása mellett SBAR átadással átadva");
+        }
+      };
 
       const findNearest = useCallback((pt) => {
         let best = spots[0], minD = Infinity;
@@ -555,10 +602,13 @@
         if (mode === "A") { setPtA({ x, y }); setMode("B"); } else { setPtB({ x, y }); }
       };
 
-      const picFull = `${currentUser.name}, ${ROLES[currentUser.role]?.label || "Légimentő pilóta"}`;
-      const generatedReport = useMemo(() => {
-        const routeTxt = ptA.x === 52.5 && ptA.y === 76.0 ? spotB.route : `${spotA.name} → ${spotB.name} direkt légifolyosó (${distKm} km), 1.500–2.000 ft AGL`;
+      const picFull = `${currentUser.name}, Légijármű-parancsnok (PIC)`;
+      const routeTxt = ptA.x === 52.5 && ptA.y === 76.0 ? spotB.route : `${spotA.name} → ${spotB.name} direkt légifolyosó (${distKm} km), 1.500–2.000 ft AGL`;
+
+      const generatedPicReport = useMemo(() => {
         return `========================================================================
+LÉGIJÁRMŰ-PARANCSNOK (PIC) – REPÜLÉSI NAPLÓ
+========================================================================
 1. ALAPADATOK ÉS SZEMÉLYZET
 - Dátum: ${todayStr}
 - Légijármű lajstromjele / hívójele: ${callsign}
@@ -567,7 +617,7 @@
 - Riasztás jellege / indoka: ${reason}
 
 2. REPÜLÉSI ÉS MŰSZAKI ADATOK
-- Felszállás időpontja (bázisról): ${takeoffTime}
+- Felszállás időpontja (bázisról): ${takeoffTime || "[ÓÓ:PP]"}
 - Felszálláskori üzemanyagszint: ${fuel}
 - Időjárási és látási viszonyok: ${weather}
 - Választott repülési útvonal és magasság: ${routeTxt}
@@ -585,13 +635,44 @@
 - Összes repült idő: ${estFlightMin} perc (becsült távolság: ${distKm} km)
 - Légijármű műszaki állapota leszállás után: Sérülésmentes, üzemanyag utántöltve, következő bevetésre kész
 
-Aláírás: ${currentUser.name}
+Aláírás (PIC): ${currentUser.name}
 ========================================================================`;
-      }, [todayStr, callsign, picFull, doctor, reason, takeoffTime, fuel, weather, spotA, spotB, ptA, ptB, distKm, lzSecurity, hospTime, baseTime, estFlightMin, currentUser.name]);
+      }, [todayStr, callsign, picFull, doctor, reason, takeoffTime, fuel, weather, routeTxt, spotB, ptB, lzSecurity, hospTime, baseTime, estFlightMin, distKm, currentUser.name]);
 
-      const copyReport = () => {
-        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(generatedReport).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
-        else { const ta = document.createElement("textarea"); ta.value = generatedReport; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+      const generatedDoctorReport = useMemo(() => {
+        return `========================================================================
+LÉGI MENTŐORVOS (HEMS DOCTOR) – BETEGELLÁTÁSI JEGYZŐKÖNYV
+(Félig automatikusan kitöltve a PIC bevetési adataiból)
+========================================================================
+1. BEVETÉSI KERETADATOK (PILÓTA ADATAI ALAPJÁN)
+- Dátum: ${todayStr}
+- Légijármű lajstromjele / hívójele: ${callsign}
+- Légi mentőorvos (HEMS Doctor): ${doctor}
+- Légijármű-parancsnok (PIC): ${picFull}
+- Riasztás jellege / indoka: ${reason}
+- Helyszín / Leszállózóna (LZ): ${spotB.name} [X: ${ptB.x}% | Y: ${ptB.y}%]
+- Időpontok: Felszállás ${takeoffTime || "[ÓÓ:PP]"} | Kórház ${hospTime || "[ÓÓ:PP]"} | Bázis ${baseTime || "[ÓÓ:PP]"} (${estFlightMin} perc)
+
+2. BETEGADATOK, SÉRÜLÉS ÉS ELLÁTÁS MENETE (SZAKSZAVAKKAL)
+- Beteg neve: ${patientName}
+- Sérülés: ${injuryDesc}
+- Ellátás menete: ${careSteps}
+- Anamnézis / mechanizmus: ${anamnesis}
+- Helyszíni vitális paraméterek: ${vitalsScene}
+- Repülés alatti / átadáskori vitális paraméterek: ${vitalsFlight}
+
+3. GYÓGYSZEREZÉS, BEAVATKOZÁSOK ÉS SBAR ÁTADÁS
+- Alkalmazott gyógyszerek: ${medsApplied}
+- Invazív és egyéb beavatkozások: ${interventions}
+- Kórházi átadás (SBAR): ${handoverNotes}
+
+Aláírás (HEMS Doctor): ${doctor}
+========================================================================`;
+      }, [todayStr, callsign, doctor, picFull, reason, spotB, ptB, takeoffTime, hospTime, baseTime, estFlightMin, patientName, injuryDesc, careSteps, anamnesis, vitalsScene, vitalsFlight, medsApplied, interventions, handoverNotes]);
+
+      const copyToClipboard = (txt, setter) => {
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(() => { setter(true); setTimeout(() => setter(false), 2000); });
+        else { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); setter(true); setTimeout(() => setter(false), 2000); }
       };
 
       const markerScale = 1 / Math.sqrt(zoom);
@@ -603,7 +684,7 @@ Aláírás: ${currentUser.name}
               <span className="p-2 rounded-lg bg-sky-500 text-white"><Icons.Helicopter c="w-5 h-5" /></span>
               <div>
                 <h3 className="text-sm font-extrabold uppercase tracking-wider text-amber-400">Interaktív GTA V Légimentő Térkép & Jelentésgenerátor</h3>
-                <p className="text-xs text-slate-300">Kattints a térképre az <strong>A (Felszállás)</strong> és <strong>B (Leszállózóna)</strong> pont kijelöléséhez – nagyításhoz használd a <strong>+ / -</strong> gombokat!</p>
+                <p className="text-xs text-slate-300">A pilóta által megadott adatok (dátum, helyszín, időpontok, hívójel) automatikusan átkerülnek a mentőorvosi jelentésbe is.</p>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-xl">
@@ -659,13 +740,52 @@ Aláírás: ${currentUser.name}
                 <div><label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Kórház / Bázis visszaérkezés</label><div className="flex gap-2"><input type="text" value={hospTime} onChange={(e) => setHospTime(e.target.value)} placeholder="Kórház ÓÓ:PP" className="inp bg-white text-xs" /><input type="text" value={baseTime} onChange={(e) => setBaseTime(e.target.value)} placeholder="Bázis ÓÓ:PP" className="inp bg-white text-xs" /></div></div>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold uppercase text-slate-600">Élőben generált jelentés (Becsült repült idő: {estFlightMin} perc)</span>
-                  <button type="button" onClick={copyReport} className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold ${copied ? "bg-emerald-600 text-white" : "bg-red-600 hover:bg-red-700 text-white"}`}>{copied ? <Icons.Check c="w-3.5 h-3.5" /> : <Icons.Copy c="w-3.5 h-3.5" />}{copied ? "Jelentés kimásolva!" : "Jelentés másolása"}</button>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setReportRoleTab("pic")} className={`px-3.5 py-2 rounded-lg text-xs font-extrabold ${reportRoleTab === "pic" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-700"}`}>Pilóta (PIC) Repülési Napló</button>
+                  <button type="button" onClick={() => setReportRoleTab("doctor")} className={`px-3.5 py-2 rounded-lg text-xs font-extrabold ${reportRoleTab === "doctor" ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-700"}`}>Mentőorvos (HEMS Doctor) Jegyzőkönyv</button>
                 </div>
-                <pre className="p-3.5 rounded-xl bg-slate-900 text-slate-100 text-[11px] sm:text-xs font-mono whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">{generatedReport}</pre>
+                <span className="text-xs font-semibold text-slate-500">Dátum: {todayStr} • Repült idő: {estFlightMin} p ({distKm} km)</span>
               </div>
+
+              {reportRoleTab === "pic" ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold uppercase text-slate-600">Pilóta (PIC) által kitöltött repülési jelentés</span>
+                    <button type="button" onClick={() => copyToClipboard(generatedPicReport, setCopiedPic)} className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold ${copiedPic ? "bg-emerald-600 text-white" : "bg-red-600 hover:bg-red-700 text-white"}`}>{copiedPic ? <Icons.Check c="w-3.5 h-3.5" /> : <Icons.Copy c="w-3.5 h-3.5" />}{copiedPic ? "Pilóta jelentés kimásolva!" : "Pilóta jelentés másolása"}</button>
+                  </div>
+                  <pre className="p-3.5 rounded-xl bg-slate-900 text-slate-100 text-[11px] sm:text-xs font-mono whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">{generatedPicReport}</pre>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-sky-50/70 p-4 rounded-xl border border-sky-200">
+                    <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-sky-200/80">
+                      <span className="text-[11px] font-extrabold uppercase text-sky-950">Orvosi sablonok (szakszavakkal):</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button type="button" onClick={() => applyDoctorTemplate("trauma")} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${docTemplatePreset === "trauma" ? "bg-sky-700 text-white" : "bg-white text-sky-900 border border-sky-300"}`}>Polytrauma / Fractura</button>
+                        <button type="button" onClick={() => applyDoctorTemplate("penetrating")} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${docTemplatePreset === "penetrating" ? "bg-sky-700 text-white" : "bg-white text-sky-900 border border-sky-300"}`}>Áthatoló laesio / Shock</button>
+                        <button type="button" onClick={() => applyDoctorTemplate("loc")} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${docTemplatePreset === "loc" ? "bg-sky-700 text-white" : "bg-white text-sky-900 border border-sky-300"}`}>Syncope / Tudatzavar</button>
+                      </div>
+                    </div>
+                    <div><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Beteg neve</label><input type="text" value={patientName} onChange={(e) => setPatientName(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Sérülés (szakszóval)</label><input type="text" value={injuryDesc} onChange={(e) => setInjuryDesc(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div className="sm:col-span-2"><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Ellátás menete (szakszóval)</label><input type="text" value={careSteps} onChange={(e) => setCareSteps(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div className="sm:col-span-2"><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Anamnézis és sérülési mechanizmus</label><input type="text" value={anamnesis} onChange={(e) => setAnamnesis(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Helyszíni vitális paraméterek</label><input type="text" value={vitalsScene} onChange={(e) => setVitalsScene(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Repülés alatti / átadáskori vitális értékek</label><input type="text" value={vitalsFlight} onChange={(e) => setVitalsFlight(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Alkalmazott gyógyszerek</label><input type="text" value={medsApplied} onChange={(e) => setMedsApplied(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Invazív beavatkozások</label><input type="text" value={interventions} onChange={(e) => setInterventions(e.target.value)} className="inp bg-white text-xs" /></div>
+                    <div className="sm:col-span-2"><label className="block text-[11px] font-bold uppercase text-sky-900 mb-1">Kórházi átadás menete (SBAR)</label><input type="text" value={handoverNotes} onChange={(e) => setHandoverNotes(e.target.value)} className="inp bg-white text-xs" /></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-extrabold uppercase text-sky-800">Félig automatikusan kitöltött mentőorvosi jegyzőkönyv</span>
+                      <button type="button" onClick={() => copyToClipboard(generatedDoctorReport, setCopiedDoc)} className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold ${copiedDoc ? "bg-emerald-600 text-white" : "bg-sky-600 hover:bg-sky-700 text-white"}`}>{copiedDoc ? <Icons.Check c="w-3.5 h-3.5" /> : <Icons.Copy c="w-3.5 h-3.5" />}{copiedDoc ? "Orvosi jelentés kimásolva!" : "Orvosi jelentés másolása"}</button>
+                    </div>
+                    <pre className="p-3.5 rounded-xl bg-slate-900 text-sky-100 text-[11px] sm:text-xs font-mono whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed">{generatedDoctorReport}</pre>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
